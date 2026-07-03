@@ -3,6 +3,8 @@
   <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="ttbat-api-base" content="https://api.ttbat.fr">
+    <meta name="ttbat-api-contact" content="https://api.ttbat.fr/api/contact.php">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet">
@@ -684,6 +686,47 @@
     <script>
       document.getElementById("year").textContent = new Date().getFullYear();
 
+      function resolveApiBase() {
+        const meta = document.querySelector('meta[name="ttbat-api-base"]');
+        const configured = meta && meta.content ? meta.content.trim() : "";
+        if (configured) return configured.replace(/\/+$/, "");
+        return "";
+      }
+      function resolveApiContact() {
+        const meta = document.querySelector('meta[name="ttbat-api-contact"]');
+        const configured = meta && meta.content ? meta.content.trim() : "";
+        return configured;
+      }
+      const API_BASE = resolveApiBase();
+      const API_CONTACT_OVERRIDE = resolveApiContact();
+      const CONTACT_ENDPOINTS = API_CONTACT_OVERRIDE
+        ? [API_CONTACT_OVERRIDE]
+        : [
+            (API_BASE ? API_BASE : "") + "/api/contact",
+            (API_BASE ? API_BASE : "") + "/api/contact.php",
+          ];
+
+      async function postContact(payload) {
+        let lastError = null;
+        for (const endpoint of CONTACT_ENDPOINTS) {
+          try {
+            const response = await fetch(endpoint, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(payload),
+            });
+            const data = await response.json().catch(() => ({}));
+            if (response.ok && data.ok) {
+              return { ok: true, response, data };
+            }
+            lastError = { response, data };
+          } catch (err) {
+            lastError = { error: err };
+          }
+        }
+        return { ok: false, ...(lastError || {}) };
+      }
+
       const observer = new IntersectionObserver((entries) => {
         entries.forEach((entry) => {
           if (entry.isIntersecting) {
@@ -770,21 +813,17 @@
             if (btn) { btn.disabled = true; btn.textContent = "Envoi en cours…"; }
             status.style.display = "none";
             try {
-              const res = await fetch("/api/contact", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  fullname: form.fullname.value,
-                  phone:    form.phone.value,
-                  email:    form.email.value,
-                  subject:  form.subject.value,
-                  message:  form.message.value,
-                  website:  form.website ? form.website.value : "",
-                  form_ts:  form.form_ts ? Number(form.form_ts.value || 0) : 0,
-                }),
-              });
-              const data = await res.json().catch(() => ({}));
-              if (res.ok && data.ok) {
+              const payload = {
+                fullname: form.fullname.value,
+                phone:    form.phone.value,
+                email:    form.email.value,
+                subject:  form.subject.value,
+                message:  form.message.value,
+                website:  form.website ? form.website.value : "",
+                form_ts:  form.form_ts ? Number(form.form_ts.value || 0) : 0,
+              };
+              const result = await postContact(payload);
+              if (result.ok) {
                 status.textContent = "✓ Message envoyé ! Nous vous recontacterons rapidement.";
                 status.style.color = "#6ee7b7";
                 form.reset();
@@ -792,7 +831,7 @@
                   formTs.value = String(Date.now());
                 }
               } else {
-                status.textContent = "✗ " + (data.error || "Une erreur est survenue, réessayez.");
+                status.textContent = "✗ " + ((result.data && result.data.error) || "Une erreur est survenue, réessayez.");
                 status.style.color = "#fca5a5";
               }
             } catch {
