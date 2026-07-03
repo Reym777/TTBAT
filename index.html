@@ -435,16 +435,61 @@
       }
       @media (max-width: 760px) {
         .site-header .shell, .section-head, .footer-line { flex-direction: column; align-items: flex-start; }
+        .shell { width: min(100%, calc(100% - 20px)); }
         .hero-copy, .contact-form, .contact-panel, .panel { padding: 22px; }
         .hero-duo, .form-grid, .masonry { grid-template-columns: 1fr; }
-        .solutions-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .solutions-grid { grid-template-columns: 1fr; }
         .partners-grid { gap: 6px; }
         .partners-grid .panel { padding: 8px; min-height: 96px; }
         .partners-grid .panel { flex: 0 0 calc((100% - 24px) / 5); max-width: calc((100% - 24px) / 5); }
         .partners-grid .panel img { width: 46px; max-width: 46px; min-width: 46px; }
         .partners-grid .panel h3 { font-size: 0.52rem; }
         .hero-card { min-height: 420px; }
-        h1 { max-width: none; font-size: 2.9rem; }
+        h1 { max-width: none; font-size: 2.3rem; line-height: 1.1; }
+
+        /* Mobile photo optimization */
+        .overview { gap: 16px; }
+        .solutions-grid .panel,
+        .panel { border-radius: 22px; }
+        .solutions-grid .panel {
+          padding: 14px;
+          gap: 12px;
+        }
+        .solutions-grid .panel .panel-carousel,
+        .solutions-grid .panel > img {
+          width: 100%;
+          margin: 0;
+          border-radius: 18px;
+        }
+        .panel-carousel .carousel-viewport {
+          aspect-ratio: 4 / 3;
+          background: rgba(10, 14, 28, 0.9);
+        }
+        .panel-carousel .carousel-image,
+        .solutions-grid .panel img,
+        .panel img {
+          object-fit: contain;
+          object-position: center center;
+          padding: 2px;
+          background: rgba(10, 14, 28, 0.9);
+        }
+        .solutions-grid .panel h3 {
+          font-size: 1.1rem;
+          line-height: 1.3;
+          margin-top: 2px;
+        }
+        .solutions-grid .panel p {
+          font-size: 0.96rem;
+          line-height: 1.65;
+        }
+        .carousel-btn {
+          width: 44px;
+          height: 44px;
+          font-size: 1.35rem;
+          background: rgba(8, 12, 24, 0.84);
+        }
+        .carousel-btn.prev { left: 8px; }
+        .carousel-btn.next { right: 8px; }
       }
     </style>
   </head>
@@ -609,6 +654,11 @@
                 <label for="message">Développez votre demande</label>
                 <textarea id="message" name="message" placeholder="Décrivez votre projet, vos besoins ou toute information utile…" rows="5"></textarea>
               </div>
+              <div class="field full" style="position:absolute;left:-9999px;opacity:0;pointer-events:none;height:0;overflow:hidden;">
+                <label for="website">Site web</label>
+                <input id="website" name="website" type="text" tabindex="-1" autocomplete="off">
+              </div>
+              <input id="form_ts" name="form_ts" type="hidden">
             </div>
           </form>
             <button type="submit" form="contact-form" class="button button-primary" style="margin-top:18px; width:100%;">Envoyer ma demande</button>
@@ -709,6 +759,10 @@
         // Envoi formulaire TTBAT → Netlify → Telegram
         const form = document.getElementById("contact-form");
         const status = document.getElementById("form-status");
+        const formTs = document.getElementById("form_ts");
+        if (formTs) {
+          formTs.value = String(Date.now());
+        }
         if (form && status) {
           form.addEventListener("submit", async (e) => {
             e.preventDefault();
@@ -725,6 +779,8 @@
                   email:    form.email.value,
                   subject:  form.subject.value,
                   message:  form.message.value,
+                  website:  form.website ? form.website.value : "",
+                  form_ts:  form.form_ts ? Number(form.form_ts.value || 0) : 0,
                 }),
               });
               const data = await res.json().catch(() => ({}));
@@ -732,6 +788,9 @@
                 status.textContent = "✓ Message envoyé ! Nous vous recontacterons rapidement.";
                 status.style.color = "#6ee7b7";
                 form.reset();
+                if (formTs) {
+                  formTs.value = String(Date.now());
+                }
               } else {
                 status.textContent = "✗ " + (data.error || "Une erreur est survenue, réessayez.");
                 status.style.color = "#fca5a5";

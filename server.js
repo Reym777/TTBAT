@@ -12,6 +12,28 @@ const port = Number(process.env.PORT || 8787);
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+const DEFAULT_ALLOWED_ORIGINS = [
+  "https://ttbat.fr",
+  "https://www.ttbat.fr",
+  "http://localhost:8787",
+  "http://127.0.0.1:8787",
+];
+const DEFAULT_ALLOWED_HOSTS = ["ttbat.fr", "www.ttbat.fr", "localhost", "127.0.0.1"];
+const ALLOWED_ORIGINS = new Set(
+  String(process.env.ALLOWED_ORIGINS || "")
+    .split(",")
+    .map((v) => v.trim())
+    .filter(Boolean)
+    .concat(DEFAULT_ALLOWED_ORIGINS)
+);
+const ALLOWED_HOSTS = new Set(
+  String(process.env.ALLOWED_HOSTS || "")
+    .split(",")
+    .map((v) => v.trim().toLowerCase())
+    .filter(Boolean)
+    .concat(DEFAULT_ALLOWED_HOSTS)
+);
+
 const clean = (v, max = 200) => String(v || "").trim().replace(/\s+/g, " ").slice(0, max);
 const isValidEmail = (e) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(e);
 const isValidPhone = (p) => /^[0-9+().\s-]{6,30}$/.test(p);
@@ -21,14 +43,49 @@ const hasSpam = (text) =>
   /(.)\1{9,}/.test(text);
 
 app.disable("x-powered-by");
-app.use(helmet());
-app.use(express.json({ limit: "30kb" }));
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      baseUri: ["'self'"],
+      objectSrc: ["'none'"],
+      frameAncestors: ["'none'"],
+      formAction: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'"],
+      styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+      imgSrc: ["'self'", "data:", "blob:"],
+      fontSrc: ["'self'", "https://fonts.gstatic.com", "data:"],
+      connectSrc: ["'self'"],
+      upgradeInsecureRequests: [],
+    },
+  },
+  referrerPolicy: { policy: "strict-origin-when-cross-origin" },
+  crossOriginEmbedderPolicy: false,
+}));
+app.use(express.json({ limit: "10kb", type: "application/json" }));
 
 app.use((req, res, next) => {
-  res.setHeader("Access-Control-Allow-Origin", "*");
+  const hostHeader = String(req.headers.host || "").toLowerCase();
+  const host = hostHeader.split(":")[0];
+  if (!host || !ALLOWED_HOSTS.has(host)) {
+    return res.status(400).json({ ok: false, error: "Host invalide" });
+  }
+  return next();
+});
+
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  const allowedOrigin = origin && ALLOWED_ORIGINS.has(origin) ? origin : "";
+  if (allowedOrigin) {
+    res.setHeader("Access-Control-Allow-Origin", allowedOrigin);
+    res.setHeader("Vary", "Origin");
+  }
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
   res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
   if (req.method === "OPTIONS") {
+    if (!allowedOrigin) {
+      return res.status(403).json({ ok: false, error: "Origine non autorisee" });
+    }
     return res.status(204).end();
   }
   return next();
@@ -36,12 +93,20 @@ app.use((req, res, next) => {
 
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 30,
+  max: 20,
   standardHeaders: true,
   legacyHeaders: false,
   message: { ok: false, error: "Trop de tentatives. Reessayez plus tard." },
 });
 app.use("/api/", limiter);
+
+const contactLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 6,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { ok: false, error: "Trop de demandes. Reessayez dans quelques minutes." },
+});
 
 app.use(express.static(__dirname, { extensions: ["html"] }));
 
@@ -53,7 +118,15 @@ app.get("/", (_req, res) => {
   res.sendFile(path.join(__dirname, "index.html"));
 });
 
-app.post("/api/contact", async (req, res) => {
+app.post("/api/contact", contactLimiter, async (req, res) => {
+  const origin = req.headers.origin || "";
+  if (origin && !ALLOWED_ORIGINS.has(origin)) {
+    return res.status(403).json({ ok: false, error: "Origine non autorisee" });
+  }
+  if (!req.is("application/json")) {
+    return res.status(415).json({ ok: false, error: "Type de contenu invalide" });
+  }
+
   const botToken = process.env.TELEGRAM_BOT_TOKEN;
   const chatId = process.env.TELEGRAM_CHAT_ID;
 
@@ -66,6 +139,16 @@ app.post("/api/contact", async (req, res) => {
   const email = clean(req.body?.email, 160).toLowerCase();
   const subject = clean(req.body?.subject, 200);
   const message = clean(req.body?.message, 1200);
+  const website = clean(req.body?.website, 80);
+  const formTs = Number(req.body?.form_ts || 0);
+  const formAge = Date.now() - formTs;
+
+  if (website) {
+    return res.status(200).json({ ok: true, message: "Message envoye avec succes" });
+  }
+  if (!Number.isFinite(formTs) || formAge < 2000 || formAge > 1000 * 60 * 60 * 2) {
+    return res.status(422).json({ ok: false, error: "Validation temporelle invalide" });
+  }
 
   if (!fullname || fullname.length < 2) {
     return res.status(422).json({ ok: false, error: "Nom invalide" });
@@ -96,11 +179,19 @@ app.post("/api/contact", async (req, res) => {
   ].join("\n");
 
   try {
-    const tgRes = await fetch("https://api.telegram.org/bot" + botToken + "/sendMessage", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ chat_id: chatId, text }),
-    });
+    const ac = new AbortController();
+    const timer = setTimeout(() => ac.abort(), 9000);
+    let tgRes;
+    try {
+      tgRes = await fetch("https://api.telegram.org/bot" + botToken + "/sendMessage", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ chat_id: chatId, text }),
+        signal: ac.signal,
+      });
+    } finally {
+      clearTimeout(timer);
+    }
     const tgJson = await tgRes.json();
 
     if (!tgJson.ok) {
