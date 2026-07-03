@@ -11,7 +11,7 @@ Deploy
 3. Add Worker environment variables:
    - RESEND_API_KEY=RE_...
    - RESEND_FROM=TTBAT <contact@your-verified-domain>
-  - CONTACT_TO=eymericplaisant@gmail.com
+  - CONTACT_TO=ttbatiso@gmail.com
    - ALLOWED_ORIGIN=https://ttbat.fr
 4. Deploy Worker.
 5. Copy Worker URL (example: https://ttbat-contact.yourname.workers.dev/contact).

@@ -1,9 +1,13 @@
 export default {
   async fetch(request, env) {
+    const requestOrigin = (request.headers.get("Origin") || "").trim();
+    const allowOrigin = requestOrigin || "*";
+
     const corsHeaders = {
-      "Access-Control-Allow-Origin": env.ALLOWED_ORIGIN || "https://ttbat.fr",
+      "Access-Control-Allow-Origin": allowOrigin,
       "Access-Control-Allow-Headers": "Content-Type",
       "Access-Control-Allow-Methods": "POST,OPTIONS",
+      "Vary": "Origin",
       "Content-Type": "application/json; charset=utf-8",
     };
 
@@ -110,7 +114,7 @@ export default {
       },
       body: JSON.stringify({
         from: env.RESEND_FROM,
-        to: [env.CONTACT_TO || "eymericplaisant@gmail.com"],
+        to: [env.CONTACT_TO || "ttbatiso@gmail.com"],
         reply_to: [email],
         subject: `[TTBAT] ${subject}`,
         html,
