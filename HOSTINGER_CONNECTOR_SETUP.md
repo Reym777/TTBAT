@@ -2,7 +2,7 @@ Hostinger Connector - Deploiement API Contact
 
 Objectif
 - Garder le frontend sur GitHub Pages.
-- Deployer un endpoint PHP sur Hostinger qui envoie les emails de contact vers eymeric.plaisant@gmail.com.
+- Deployer un endpoint PHP sur Hostinger qui envoie les emails de contact vers eymericplaisant@gmail.com.
 
 1. Dossier a deployer avec Hostinger Connector
 - Source locale: hostinger-api/api/contact.php
@@ -24,13 +24,13 @@ Objectif
 
 5. Test rapide
 - Depuis ttbat.fr, soumettre le formulaire.
-- Verifier reception sur eymeric.plaisant@gmail.com.
+- Verifier reception sur eymericplaisant@gmail.com.
 - Si echec: verifier logs d'erreur PHP et fonction mail() active chez Hostinger.
 
 8. Activation email immediate
 - Copier hostinger-api/api/.contact.env.example en hostinger-api/api/.contact.env
 - Renseigner au minimum:
-  CONTACT_TO=eymeric.plaisant@gmail.com
+  CONTACT_TO=eymericplaisant@gmail.com
 - Pour envoi SMTP fiable (recommande):
   SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_SECURE
 - Uploader ensuite:
@@ -47,7 +47,7 @@ Objectif
   - RESEND_API_KEY=RE_xxx
   - RESEND_FROM=TTBAT <contact@ttbat.fr>
   - RESEND_ONLY=true
-- Conserver CONTACT_TO=eymeric.plaisant@gmail.com
+- Conserver CONTACT_TO=eymericplaisant@gmail.com
 - Uploader contact.php et .contact.env
 
 6. Securite incluse dans contact.php

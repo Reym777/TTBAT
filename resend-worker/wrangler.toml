@@ -1,0 +1,11 @@
+name = "ttbat-contact-eymeric-2026"
+main = "worker.js"
+compatibility_date = "2026-07-03"
+
+[vars]
+ALLOWED_ORIGIN = "https://ttbat.fr"
+CONTACT_TO = "eymericplaisant@gmail.com"
+RESEND_FROM = "TTBAT <onboarding@resend.dev>"
+
+[observability]
+enabled = true

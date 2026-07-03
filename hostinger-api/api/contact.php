@@ -364,7 +364,7 @@ if (preg_match($spamRegex, implode(' ', [$fullname, $phone, $subject, $message])
     exit;
 }
 
-$to = trim((string)($cfg['CONTACT_TO'] ?? 'eymeric.plaisant@gmail.com'));
+$to = trim((string)($cfg['CONTACT_TO'] ?? 'eymericplaisant@gmail.com'));
 $fromEmail = trim((string)($cfg['MAIL_FROM'] ?? 'no-reply@ttbat.fr'));
 $fromName = trim((string)($cfg['MAIL_FROM_NAME'] ?? 'TTBAT'));
 $smtpHost = trim((string)($cfg['SMTP_HOST'] ?? ''));
