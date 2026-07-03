@@ -833,7 +833,7 @@
               } else {
                 const apiError = (result.data && result.data.error) ? String(result.data.error) : "";
                 const httpStatus = result.response ? `HTTP ${result.response.status}` : "";
-                const netError = result.error ? "Erreur reseau/CORS" : "";
+                const netError = result.error ? "API non joignable (reseau/DNS/CORS)" : "";
                 const endpointInfo = result.endpoint ? ` (${result.endpoint})` : "";
                 const msg = apiError || httpStatus || netError || "Une erreur est survenue, réessayez.";
                 status.textContent = "✗ " + msg + endpointInfo;

@@ -42,6 +42,14 @@ Objectif
 - SMTP natif (sans dependance externe)
 - mail() PHP (fallback final)
 
+10. Utiliser Resend (recommande)
+- Dans api/.contact.env, definir:
+  - RESEND_API_KEY=RE_xxx
+  - RESEND_FROM=TTBAT <contact@ttbat.fr>
+  - RESEND_ONLY=true
+- Conserver CONTACT_TO=eymeric.plaisant@gmail.com
+- Uploader contact.php et .contact.env
+
 6. Securite incluse dans contact.php
 - CORS restreint a ttbat.fr et www.ttbat.fr
 - Validation stricte JSON + champs

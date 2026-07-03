@@ -21,7 +21,7 @@ function loadLocalConfig(string $filePath): array
     $out = [];
     foreach ($rows as $row) {
         $line = trim((string)$row);
-        if ($line === '' || str_starts_with($line, '#')) {
+        if ($line === '' || strpos($line, '#') === 0) {
             continue;
         }
         $parts = explode('=', $line, 2);
@@ -178,6 +178,79 @@ function smtpSendNative(
     return true;
 }
 
+function resendSend(
+    string $apiKey,
+    string $from,
+    string $to,
+    string $replyTo,
+    string $subject,
+    string $textBody,
+    string $htmlBody
+): bool {
+    if ($apiKey === '' || $from === '' || $to === '') {
+        return false;
+    }
+
+    $payload = [
+        'from' => $from,
+        'to' => [$to],
+        'subject' => $subject,
+        'text' => $textBody,
+        'html' => $htmlBody,
+        'reply_to' => [$replyTo],
+    ];
+
+    $json = json_encode($payload, JSON_UNESCAPED_UNICODE);
+    if (!is_string($json)) {
+        return false;
+    }
+
+    // Prefer cURL when available.
+    if (function_exists('curl_init')) {
+        $ch = curl_init('https://api.resend.com/emails');
+        if ($ch === false) {
+            return false;
+        }
+        curl_setopt_array($ch, [
+            CURLOPT_POST => true,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT => 15,
+            CURLOPT_HTTPHEADER => [
+                'Authorization: Bearer ' . $apiKey,
+                'Content-Type: application/json',
+            ],
+            CURLOPT_POSTFIELDS => $json,
+        ]);
+        $response = curl_exec($ch);
+        $httpCode = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+        if ($response === false) {
+            return false;
+        }
+        return $httpCode >= 200 && $httpCode < 300;
+    }
+
+    // Fallback via stream context.
+    $context = stream_context_create([
+        'http' => [
+            'method' => 'POST',
+            'timeout' => 15,
+            'header' => "Authorization: Bearer {$apiKey}\r\nContent-Type: application/json\r\n",
+            'content' => $json,
+        ],
+    ]);
+    $result = @file_get_contents('https://api.resend.com/emails', false, $context);
+    if ($result === false) {
+        return false;
+    }
+
+    $statusLine = '';
+    if (isset($http_response_header) && is_array($http_response_header) && isset($http_response_header[0])) {
+        $statusLine = (string)$http_response_header[0];
+    }
+    return strpos($statusLine, ' 2') !== false;
+}
+
 $cfg = loadLocalConfig(__DIR__ . '/.contact.env');
 
 $allowedOrigins = [
@@ -299,6 +372,9 @@ $smtpPort = (int)($cfg['SMTP_PORT'] ?? 587);
 $smtpUser = trim((string)($cfg['SMTP_USER'] ?? ''));
 $smtpPass = trim((string)($cfg['SMTP_PASS'] ?? ''));
 $smtpSecure = strtolower(trim((string)($cfg['SMTP_SECURE'] ?? 'tls')));
+$resendApiKey = trim((string)($cfg['RESEND_API_KEY'] ?? ''));
+$resendFrom = trim((string)($cfg['RESEND_FROM'] ?? ''));
+$resendOnly = strtolower(trim((string)($cfg['RESEND_ONLY'] ?? 'false'))) === 'true';
 $dateText = date('d/m/Y H:i:s');
 $mailSubject = '[TTBAT] ' . $subject;
 $mailText = "NOUVELLE DEMANDE TTBAT\n\n"
@@ -309,6 +385,14 @@ $mailText = "NOUVELLE DEMANDE TTBAT\n\n"
     . ($message !== '' ? "\nMessage :\n{$message}\n" : '')
     . "\n{$dateText}\n";
 
+$mailHtml = '<h2>Nouvelle demande TTBAT</h2>'
+    . '<p><strong>Nom :</strong> ' . htmlspecialchars($fullname, ENT_QUOTES, 'UTF-8') . '</p>'
+    . '<p><strong>Telephone :</strong> ' . htmlspecialchars($phone, ENT_QUOTES, 'UTF-8') . '</p>'
+    . '<p><strong>Email :</strong> ' . htmlspecialchars($email, ENT_QUOTES, 'UTF-8') . '</p>'
+    . '<p><strong>Sujet :</strong> ' . htmlspecialchars($subject, ENT_QUOTES, 'UTF-8') . '</p>'
+    . '<p><strong>Message :</strong><br>' . nl2br(htmlspecialchars($message, ENT_QUOTES, 'UTF-8')) . '</p>'
+    . '<p><strong>Date :</strong> ' . htmlspecialchars($dateText, ENT_QUOTES, 'UTF-8') . '</p>';
+
 $headers = [
     'From: ' . $fromName . ' <' . $fromEmail . '>',
     'Reply-To: ' . $email,
@@ -318,7 +402,26 @@ $headers = [
 
 $sent = false;
 
+if ($resendApiKey !== '' && $resendFrom !== '') {
+    $sent = resendSend(
+        $resendApiKey,
+        $resendFrom,
+        $to,
+        $email,
+        $mailSubject,
+        $mailText,
+        $mailHtml
+    );
+}
+
+if (!$sent && $resendOnly) {
+    http_response_code(502);
+    echo json_encode(['ok' => false, 'error' => 'Erreur envoi email (Resend)'], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
 if (
+    !$sent &&
     class_exists('PHPMailer\\PHPMailer\\PHPMailer')
     && $smtpHost !== ''
     && $smtpUser !== ''
